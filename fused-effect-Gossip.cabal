@@ -1,5 +1,5 @@
 cabal-version:      2.4
-name:               fused-effect-crdt
+name:               fused-effect-Gossip
 version:            0.1.0.0
 synopsis:
 
@@ -35,10 +35,11 @@ library
                     , containers >= 0.6
                     , bytestring >= 0.10
                     , text
+
     hs-source-dirs:   src
     default-language: Haskell2010
 
-executable fused-effect-crdt
+executable fused-effect-Gossip
     main-is:          Main.hs
 
     -- Modules included in this executable, other than Main.
@@ -48,12 +49,12 @@ executable fused-effect-crdt
     -- other-extensions:
     build-depends:
         base ^>=4.14.3.0,
-        fused-effect-crdt
+        fused-effect-Gossip
 
     hs-source-dirs:   app
     default-language: Haskell2010
 
-test-suite fused-effect-crdt-test
+test-suite fused-effect-Gossip-test
     default-language: Haskell2010
     type:             exitcode-stdio-1.0
     hs-source-dirs:   test
