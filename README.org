@@ -1,0 +1,5 @@
+* CRDT
+** resources
+  1. https://bartoszsypytkowski.com/the-state-of-a-state-based-crdts/
+  2. https://crdt.tech/resources
+** crdt demo
