@@ -1,0 +1,1 @@
+module Gossip.Types where
