@@ -159,71 +159,47 @@ example = do
 
 runIO :: IO ()
 runIO = do
-  tq0 <- newTQueueIO
-  tq1 <- newTQueueIO
-  tq2 <- newTQueueIO
-  tq3 <- newTQueueIO
-  let nid0 = NodeId 0
-      nid1 = NodeId 1
-      nid2 = NodeId 2
-      nid3 = NodeId 3
+  let number = 10
+  ls <- forM [0 .. number -1] $ \i -> do
+    tq <- newTQueueIO
+    return (NodeId i, tq)
 
-  atomically $ writeTQueue tq1 (nid0, "start")
+  forM_ [1 .. number - 1] $ \i -> do
+    let (ni,tqi) = ls !! i
+        (niNext, tqiNext) = ls !! ((i + 1) `mod` number)
+    forkIO $ void
+       $ runNodeAction @IO @String (NodeState ni tqi (Map.singleton niNext tqiNext))
+       $ runState @String ""
+       $ runRandom (mkStdGen 10) example
 
-  forkIO $ void
-     $ runNodeAction @IO @String (NodeState nid3 tq3 (Map.singleton nid0 tq0))
-     $ runState @String ""
-     $ runState @(Set NodeId) Set.empty
-     $ runRandom (mkStdGen 10) example
+  let (ni0,tqi0) = head ls
+      (ni1,tqi1) = ls !! 1
+  atomically $ writeTQueue tqi1 (ni0, "start")
 
-  forkIO $ void
-     $ runNodeAction @IO @String (NodeState nid2 tq2 (Map.singleton nid3 tq3))
-     $ runState @String ""
-     $ runState @(Set NodeId) Set.empty
-     $ runRandom (mkStdGen 10) example
-
-  runNodeAction @IO @String (NodeState nid1 tq1 (Map.singleton nid2 tq2))
-     $ runState @String ""
-     $ runState @(Set NodeId) Set.empty
-     $ runRandom (mkStdGen 10) example
-
-  atomically $ readTQueue tq0
+  atomically $ readTQueue tqi0
   return ()
-
 
 
 runIOSim :: forall s. ST s (SimTrace ())
 runIOSim = runSimTraceST $ do
-  tq0 <- newTQueueIO
-  tq1 <- newTQueueIO
-  tq2 <- newTQueueIO
-  tq3 <- newTQueueIO
-  let nid0 = NodeId 0
-      nid1 = NodeId 1
-      nid2 = NodeId 2
-      nid3 = NodeId 3
+  let number = 10
+  ls <- forM [0 .. number -1] $ \i -> do
+    tq <- newTQueueIO
+    return (NodeId i, tq)
 
-  atomically $ writeTQueue tq1 (nid0, "start")
+  forM_ [1 .. number - 1] $ \i -> do
+    let (ni,tqi) = ls !! i
+        (niNext, tqiNext) = ls !! ((i + 1) `mod` number)
+    forkIO $ void
+       $ runNodeAction @(IOSim s) @String (NodeState ni tqi (Map.singleton niNext tqiNext))
+       $ runState @String ""
+       $ runRandom (mkStdGen 10) example
 
-  forkIO $ void
-     $ runNodeAction @(IOSim s) @String (NodeState nid3 tq3 (Map.singleton nid0 tq0))
-     $ runState @String ""
-     $ runState @(Set NodeId) Set.empty
-     $ runRandom (mkStdGen 10) example
+  let (ni0,tqi0) = head ls
+      (ni1,tqi1) = ls !! 1
+  atomically $ writeTQueue tqi1 (ni0, "start")
 
-  forkIO $ void
-     $ runNodeAction @(IOSim s) @String (NodeState nid2 tq2 (Map.singleton nid3 tq3))
-     $ runState @String ""
-     $ runState @(Set NodeId) Set.empty
-     $ runRandom (mkStdGen 10) example
-
-  runNodeAction @(IOSim s) @String (NodeState nid1 tq1 (Map.singleton nid2 tq2))
-     $ runState @String ""
-     $ runState @(Set NodeId) Set.empty
-     $ runRandom (mkStdGen 10) example
-
-  atomically $ readTQueue tq0
+  atomically $ readTQueue tqi0
   return ()
-
 
 runSim1 = selectTraceEventsSay $ runST runIOSim
