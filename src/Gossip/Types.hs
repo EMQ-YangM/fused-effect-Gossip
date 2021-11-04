@@ -25,8 +25,9 @@ import           Control.Effect.IOClasses       (Algebra, DiffTime, IOSim,
                                                  MonadFork (forkIO),
                                                  MonadSTM (STM, atomically, newTQueueIO),
                                                  MonadSTMTx (TQueue_, readTQueue, writeTQueue),
-                                                 MonadSay (say), SimTrace,
-                                                 runSimTraceST,
+                                                 MonadSay (say),
+                                                 MonadTime (getCurrentTime),
+                                                 SimTrace, runSimTraceST,
                                                  selectTraceEventsSay)
 import           Control.Effect.Labelled
 import           Control.Effect.Reader.Labelled (HasLabelled)
@@ -83,6 +84,7 @@ instance (Has (Lift s) sig m,
           MonadDelay s,
           MonadSay s,
           Show message,
+          MonadTime s,
           MonadSTM s)
       => Algebra (NodeAction message :+: sig)
                  (NodeActionC s message m) where
@@ -92,7 +94,9 @@ instance (Has (Lift s) sig m,
         Nothing -> undefined
         Just tq -> do
           sendM @s $ do
-            say $ "send message: "
+            time <- getCurrentTime
+            say $ show time
+              ++ " send message: "
               ++ show message
               ++ ". " ++ show (ns ^. nodeId)
               ++ "* -> " ++ show nid
@@ -137,10 +141,10 @@ example = do
             if Set.null nidSet
               then return ()
               else do
+                wait 1
                 nids <- getRandom @NodeId 3
                 forM_ nids $ \nid -> do
                   sendMessage nid message
-                wait 1
                 loop
       loop
 
@@ -189,6 +193,7 @@ runIO = do
      $ runState @(Set NodeId) Set.empty
      $ runRandom (mkStdGen 10) example
 
+  atomically $ readTQueue tq0
   return ()
 
 
@@ -223,6 +228,7 @@ runIOSim = runSimTraceST $ do
      $ runState @(Set NodeId) Set.empty
      $ runRandom (mkStdGen 10) example
 
+  atomically $ readTQueue tq0
   return ()
 
 
