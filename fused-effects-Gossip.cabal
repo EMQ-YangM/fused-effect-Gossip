@@ -19,9 +19,7 @@ maintainer:         yangm@emqx.io
 extra-source-files: CHANGELOG.md
 
 library
-    exposed-modules:  MyLib
-                    , NodeAction
-                    , Gossip.Types
+    exposed-modules:  Gossip.Types
 
     -- Modules included in this library but not exported.
     -- other-modules:
