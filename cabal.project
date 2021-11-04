@@ -1,0 +1,15 @@
+packages: .
+
+source-repository-package
+  type: git
+  location: git@github.com:EMQ-YangM/fused-effects-io-sim.git
+  tag: 2683add87652a279f24c077501d074959672c0eb
+
+
+source-repository-package
+  type: git
+  location: git@github.com:EMQ-YangM/packages.git
+  tag: bce7056cd1990108ac384b40a1ed2a86f0883ca1
+  subdir:
+    io-sim
+    io-classes

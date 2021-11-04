@@ -1,4 +1,8 @@
 * Gossip
+** resources
+  1. https://www.cnblogs.com/duanxz/p/3768351.html
+  2. https://zhuanlan.zhihu.com/p/41228196
+  3. https://juejin.cn/post/6930774718114955278
 * CRDT
 ** resources
   1. https://lars.hupel.info/topics/crdt/01-intro/
