@@ -31,6 +31,7 @@ library
                     , fused-effects-optics
                     , fused-effects-io-sim
                     , fused-effects-random
+                    , vector
                     , random
                     , optics
                     , containers >= 0.6

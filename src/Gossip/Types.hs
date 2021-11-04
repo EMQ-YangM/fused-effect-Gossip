@@ -39,6 +39,9 @@ import           Data.Map                       (Map)
 import qualified Data.Map                       as Map
 import           Data.Set                       (Set)
 import qualified Data.Set                       as Set
+import           Data.Vector                    ((!))
+import qualified Data.Vector                    as V
+import           Gossip.Shuffle
 import           Optics
 import           System.Random                  (mkStdGen)
 
@@ -123,7 +126,7 @@ runNodeAction :: NodeState s message
 runNodeAction tq f = runState tq $ runNodeActionC $ runLabelled f
 
 example :: (HasLabelled NodeAction (NodeAction message) sig m, Eq message,
-            Has (Random :+: State message :+: State (Set NodeId)) sig m)
+            Has (Random :+: State message) sig m)
         => m ()
 example = do
   (sid, message) <- readMessage
@@ -135,33 +138,24 @@ example = do
 
       peers <- getPeers
 
-      put (Set.delete sid peers)
-      let loop = do
-            nidSet <- get @(Set NodeId)
-            if Set.null nidSet
-              then return ()
-              else do
-                wait 1
-                nids <- getRandom @NodeId 3
-                forM_ nids $ \nid -> do
-                  sendMessage nid message
-                loop
-      loop
+      g <- mkStdGen <$> uniform
 
-getRandom :: forall s sig m.
-             Has (Random :+: State (Set s)) sig m
-          => Int -- number
-          -> m [s]
-getRandom number = do
-  s <- get @(Set s)
-  let total = Set.size s
-  if total < number
-    then put @(Set s) Set.empty >> pure (Set.toList s)
-    else do
-      r <- replicateM number $ uniformR (0, total - 1)
-      forM (L.nub r) $ \i -> do
-        put (Set.deleteAt i s)
-        pure (Set.elemAt i s)
+      let newPeers = Set.delete sid peers -- delete sender id
+
+          size = Set.size newPeers  -- get size
+
+          shuVec = shuffleVec size g -- genrate shuffle (Vecter Int)
+
+          loop [] = return ()
+          loop nids = do
+                wait 1
+                let (ll, lr) = splitAt 3 nids
+                forM_ ll $ \index -> do
+                  sendMessage (Set.elemAt (shuVec ! index) newPeers) message
+                loop lr
+
+      loop [0 .. size -1]
+
 
 runIO :: IO ()
 runIO = do
