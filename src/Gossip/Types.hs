@@ -128,7 +128,9 @@ example = do
     then return ()
     else do
       put message
+
       peers <- getPeers
+
       put (Set.delete sid peers)
       let loop = do
             nidSet <- get @(Set NodeId)
@@ -224,4 +226,4 @@ runIOSim = runSimTraceST $ do
   return ()
 
 
-runSim1 = runST runIOSim
+runSim1 = selectTraceEventsSay $ runST runIOSim
