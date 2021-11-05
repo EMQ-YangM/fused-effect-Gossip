@@ -78,19 +78,20 @@ runS total time gen = runSimTraceST $ do
     tq <- newTQueueIO
     sirS <- newTVarIO S
     ss <- newTVarIO (Value (show i) i)
-    return ((NodeId i, tq), (sirS, ss))
+    con <- newTVarIO 0
+    return ((NodeId i, tq), (sirS, (ss,con)))
 
   forM_  list $ \i -> do
-    let ((a,b),(c,d)) = ls !! i
+    let ((a,b),(c,(d,e))) = ls !! i
         otherTQ = Map.fromList $ map (fst . (ls !!)) (L.delete i list)
-        ns = NodeState a b otherTQ c d
+        ns = NodeState a b otherTQ c d e
     forkIO $ void $
       runNodeAction @(IOSim s) @Value @(Pull, ValueOrTime) ns
          $ runRandom gen loop
     forkIO $ void $
       runNodeAction @(IOSim s) @Value @(Pull, ValueOrTime) ns receive
   threadDelay time
-  forM ls $ \((nid, _),(_, tv)) -> (nid,) <$> readTVarIO tv
+  forM ls $ \((nid, _),(_, (tv,_))) -> (nid,) <$> readTVarIO tv
 
 
 runSim = do

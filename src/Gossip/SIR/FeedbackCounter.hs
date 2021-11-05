@@ -5,7 +5,7 @@
 {-# LANGUAGE TypeApplications    #-}
 {-# LANGUAGE TypeOperators       #-}
 
-module Gossip.SIR.BlindCoin where
+module Gossip.SIR.FeedbackCounter where
 
 import           Control.Algebra
 import           Control.Carrier.Random.Gen
@@ -33,57 +33,71 @@ import           Gossip.Shuffle
 import           Optics                       (makeLenses, (^.))
 import           System.Random                (StdGen, mkStdGen, randomIO)
 
-data Push
+data PushReply
   = Push
+  | Reply
   deriving (Show)
 
 data Value
   = Value
   { _value :: String
-  , _time  :: Int
-  } deriving (Show, Eq, Ord)
+  , _time  :: Int}
+  | SV SIR
+  deriving (Show, Eq, Ord)
+
 
 makeLenses ''Value
 
-update :: (HasLabelled NodeAction (NodeAction Value (Push, Value)) sig m)
-       => Value
+update :: (HasLabelled NodeAction (NodeAction Value (PushReply, Value)) sig m)
+       => Int
+       -> Value
        -> m ()
-update v = do
-  putSIRState I
+update k v = do
   updateStore v
+  putSIRState I
+  putCounter k
   wait 1
 
-loop :: (HasLabelled NodeAction (NodeAction Value (Push, Value)) sig m,
+loop :: (HasLabelled NodeAction (NodeAction Value (PushReply, Value)) sig m,
          Has Random sig m)
-     => Double
-     -> m ()
-loop k = do
+     => m ()
+loop = do
   sir <- getSIRState
   when (sir == I) $ do
-      peers <- getPeers
-      q <- (`Set.elemAt` peers) <$> uniformR (0, Set.size peers - 1)
-      value <- readStore
-      sendMessage q (Push, value)
-      rv <- uniformR @Double (0, 1)
-      when (rv < 1 / k) $ do
-        putSIRState Gossip.NodeAction.R
-
+    peers <- getPeers
+    p <- (`Set.elemAt` peers) <$> uniformR (0, Set.size peers - 1)
+    value <- readStore
+    sendMessage p (Push, value)
   wait 1
-  loop k
+  loop
 
-receive :: (HasLabelled NodeAction (NodeAction Value (Push, Value)) sig m)
-        => m ()
-receive = do
-  (sid, (Push, v)) <- readMessage
-  sir <- getSIRState
-  when (sir == S) $ do
-    updateStore v
-    putSIRState I
-  receive
+receive :: (HasLabelled NodeAction (NodeAction Value (PushReply, Value)) sig m)
+        => Int
+        -> m ()
+receive k = do
+  (si, (method, v)) <- readMessage
+  case method of
+    Push -> do
+      sir <- getSIRState
+      sendMessage si (Reply, SV sir)
+      when (sir == S) $ do
+        updateStore v
+        putSIRState sir
+        putCounter k
+    Reply -> do
+      case v of
+        SV s -> do
+          when (s /= S) $ do
+            counter <- getCounter
+            putCounter (counter -1)
+            con1 <- getCounter
+            when (con1 == 0) $ putSIRState Gossip.NodeAction.R
+        _    -> error "never happened"
 
 runS :: forall s. Int -> DiffTime -> StdGen -> ST s (SimTrace [(NodeId, Value)])
 runS total time gen = runSimTraceST $ do
   let list = [0 .. total -1]
+      k = 10
   ls <- forM list $ \i -> do
     tq <- newTQueueIO
     sirS <- newTVarIO S
@@ -96,16 +110,16 @@ runS total time gen = runSimTraceST $ do
         otherTQ = Map.fromList $ map (fst . (ls !!)) (L.delete i list)
         ns = NodeState a b otherTQ c d e
     forkIO $ void $
-      runNodeAction @(IOSim s) @Value @(Push, Value) ns
-         $ runRandom gen (loop 60)
+      runNodeAction @(IOSim s) @Value @(PushReply, Value) ns
+         $ runRandom gen loop
     forkIO $ void $
-      runNodeAction @(IOSim s) @Value @(Push, Value) ns receive
+      runNodeAction @(IOSim s) @Value @(PushReply, Value) ns (receive k)
 
     when (i `mod` 75 == 0)
       $ void
       $ forkIO
         $ void
-        $ runNodeAction @(IOSim s) @Value @(Push, Value) ns (update (Value (show i) i))
+        $ runNodeAction @(IOSim s) @Value @(PushReply, Value) ns (update k (Value (show i) i))
 
   threadDelay time
   forM ls $ \((nid, _),(_, (tv,_))) -> (nid,) <$> readTVarIO tv
@@ -114,10 +128,13 @@ runS total time gen = runSimTraceST $ do
 runSim = do
   total <- getLine
   i <- randomIO
-  case traceResult False $ runST $ runS (read total) 30 (mkStdGen i) of
+  case traceResult False $ runST $ runS (read total) 50 (mkStdGen i) of
     Left e -> print e
     Right l -> do
       let dis = foldl (\ m (k,v) -> Map.insertWith (+) v 1 m) Map.empty l
       print dis
   runSim
+
+
+
 

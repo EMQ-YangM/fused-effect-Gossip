@@ -48,7 +48,7 @@ import           System.Random                  (mkStdGen)
 
 newtype NodeId = NodeId Int deriving (Show, Eq, Ord)
 
-data SIR = I | R | S deriving (Eq)
+data SIR = I | R | S deriving (Eq, Ord, Show)
 
 data NodeState s value message
   = NodeState
@@ -57,6 +57,7 @@ data NodeState s value message
   , _peers      :: Map NodeId (TQueue_ (STM s) (NodeId, message))
   , _sirState   :: TVar_ (STM s) SIR
   , _store      :: TVar_ (STM s) value
+  , _counter    :: TVar_ (STM s) Int
   }
 
 makeLenses ''NodeState
@@ -71,6 +72,8 @@ data NodeAction value message (m :: Type -> Type) a where
   PutSIRState :: SIR -> NodeAction value message m ()
   ReadStore   :: NodeAction value message m value
   UpdateStore :: value -> NodeAction value message m ()
+  GetCounter  :: NodeAction value message m Int
+  PutCounter  :: Int -> NodeAction value message m ()
 
 sendMessage :: HasLabelled NodeAction (NodeAction value message) sig m => NodeId -> message -> m ()
 sendMessage nid message = sendLabelled @NodeAction (SendMessage nid message)
@@ -98,6 +101,13 @@ readStore = sendLabelled @NodeAction ReadStore
 
 updateStore :: HasLabelled NodeAction (NodeAction value message) sig m => value -> m ()
 updateStore message = sendLabelled @NodeAction (UpdateStore message)
+
+getCounter :: HasLabelled NodeAction (NodeAction value message) sig m => m Int
+getCounter = sendLabelled @NodeAction GetCounter
+
+
+putCounter :: HasLabelled NodeAction (NodeAction value message) sig m => Int -> m ()
+putCounter i = sendLabelled @NodeAction (PutCounter i)
 
 newtype NodeActionC s value message m a =
   NodeActionC { runNodeActionC :: (StateC (NodeState s value message) m) a}
@@ -141,6 +151,8 @@ instance (Has (Lift s) sig m,
     L (PutSIRState sir) -> sendM @s (atomically $ writeTVar (ns ^. sirState) sir) >> pure (ns, ctx)
     L ReadStore ->  sendM @s (readTVarIO (ns ^. store)) >>= \res -> pure (ns, res <$ ctx)
     L (UpdateStore message) -> sendM @s (atomically $ writeTVar (ns ^. store) message) >> pure (ns, ctx)
+    L GetCounter ->  sendM @s (readTVarIO (ns ^. counter)) >>= \res -> pure (ns, res <$ ctx)
+    L (PutCounter message) -> sendM @s (atomically $ writeTVar (ns ^. counter) message) >> pure (ns, ctx)
     S.R other  -> thread (uncurry runState . second runNodeActionC ~<~ hdl) other (ns,ctx)
 
 
