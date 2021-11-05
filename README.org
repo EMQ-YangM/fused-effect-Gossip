@@ -3,6 +3,95 @@
   1. https://www.cnblogs.com/duanxz/p/3768351.html
   2. https://zhuanlan.zhihu.com/p/41228196
   3. https://juejin.cn/post/6930774718114955278
+** 计划
+*** 用fused-effects，和io-classes这两个库实现Gossip协议
+*** 用多线程模拟多个node执行协议
+*** 在IOSim s中验证代码
+*** 同时在IO 和 IOSim s这两种环境种执行代码，比较结果
+*** 加入网络层，并进行测试
+**** example
+#+begin_src haskell
+
+  example :: (HasLabelled NodeAction (NodeAction message) sig m, Eq message,
+              Has (Random :+: State message) sig m)
+          => m ()
+  example = do
+    (sid, message) <- readMessage
+    originMessage <- get
+    if message == originMessage
+      then return ()
+      else do
+        put message
+
+        peers <- getPeers
+
+        g <- mkStdGen <$> uniform
+
+        let newPeers = Set.delete sid peers -- delete sender id
+
+            size = Set.size newPeers  -- get size
+
+            shuVec = shuffleVec size g -- genrate shuffle (Vecter Int)
+
+            loop [] = return ()
+            loop nids = do
+                  wait 1
+                  let (ll, lr) = splitAt 3 nids
+                  forM_ ll $ \index -> do
+                    sendMessage (Set.elemAt (shuVec ! index) newPeers) message
+                  loop lr
+
+        loop [0 .. size -1]
+
+
+  runIO :: IO ()
+  runIO = do
+    let number = 100
+    ls <- forM [0 .. number -1] $ \i -> do
+      tq <- newTQueueIO
+      return (NodeId i, tq)
+
+    forM_ [1 .. number - 1] $ \i -> do
+      let (ni,tqi) = ls !! i
+          (niNext, tqiNext) = ls !! ((i + 1) `mod` number)
+      forkIO $ void
+         $ runNodeAction @IO @String (NodeState ni tqi (Map.singleton niNext tqiNext))
+         $ runState @String ""
+         $ runRandom (mkStdGen 10) example
+
+    let (ni0,tqi0) = head ls
+        (ni1,tqi1) = ls !! 1
+    atomically $ writeTQueue tqi1 (ni0, "start")
+
+    atomically $ readTQueue tqi0
+    return ()
+
+
+  runIOSim :: forall s. ST s (SimTrace ())
+  runIOSim = runSimTraceST $ do
+    let number = 100
+    ls <- forM [0 .. number -1] $ \i -> do
+      tq <- newTQueueIO
+      return (NodeId i, tq)
+
+    forM_ [1 .. number - 1] $ \i -> do
+      let (ni,tqi) = ls !! i
+          (niNext, tqiNext) = ls !! ((i + 1) `mod` number)
+      forkIO $ void
+         $ runNodeAction @(IOSim s) @String (NodeState ni tqi (Map.singleton niNext tqiNext))
+         $ runState @String ""
+         $ runRandom (mkStdGen 10) example
+
+    let (ni0,tqi0) = head ls
+        (ni1,tqi1) = ls !! 1
+    atomically $ writeTQueue tqi1 (ni0, "start")
+
+    atomically $ readTQueue tqi0
+    return ()
+
+  runSim1 = selectTraceEventsSay $ runST runIOSim
+#+end_src
+
 * CRDT
 ** resources
   1. https://lars.hupel.info/topics/crdt/01-intro/
