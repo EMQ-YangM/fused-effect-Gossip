@@ -1,0 +1,49 @@
+* Learn Gossip
+*** 1.2 Information dissemination
+*** 1.2.1 The Problem
+Let us assume we have a set of database servers (in the case of Xerox, 300 of them,
+but this number could be much larger as well). All of these servers accept updates;
+that is, new records or modifications of existing records. We want to inform all the
+servers about each update so that all the replicas of the database are identical and
+up-to-date
+*** 1.2.2 Algorithms and Theoretical Notions
+  1. We assume that we are given a set of nodes that are able to pass messages to each other.
+  2. In this section we will focus on the spreading of a single update among these
+     nodes. That is, we assume that at a certain point in time, one of the nodes gets a
+     new update from an external source, and from that point we are interested in the
+     dynamics of the spreading of that update.
+**** terminology    
+  1. susceptible(S): node does not know about the update
+  2. infected(I): knows the update and is actively spreading it
+  3. removed(R): has seen the update, but is not participating in th spreading process
+  These states are relative to one fixed update. If there are several concurrent updates, one
+  node can be infected with one update, while still being susceptible to another update, and so on.
+  
+  For the purpose of theoretical discussion, we will formulate our algorithms assuming there
+  is only one update in the system but assuming that the nodes do not know that there is only one expected update. 
+
+  SI: S -> I
+  SIR: (allow: I -> R)
+**** 1.2.2.1 The SI Model
+  1. It is formulated in an asynchronous message passing style, where each node executes
+     one process (that we call the active thread) and, furthermore, it has message handlers
+     that process incoming messages.
+  2. The active thread is executed once in each ∆ time units. We will call this waiting
+     period a gossip cycle (other terminology is also used such as gossip round or period).
+
+
+#+DOWNLOADED: screenshot @ 2021-11-05 09:58:56
+[[file:Learn_Gossip/2021-11-05_09-58-56_screenshot.png]]
+
+1. In line 3 we assume that a node can select a random peer node from the set of all nodes.
+2. push, pull are Boolean, At least one of them has to be true, otherwise no messages are sent.
+3. Depending on these parameters, we can talk about push, pull, and push-pull gossip, each
+   having significantly different dynamics and cost. 
+**** In push gossip, susceptible nodes are passive, infective nodes actively infect the population. 
+**** In pull and push-pull gossip each node is active.
+4. Notice that in line 7 we do not test whether the node is infected. The reason is
+   that we assumed that nodes do not know how many updates are expected, and do not
+   exchange information about which updates they have received. 
+**** 1.2.2.2 The SIR Model
+
+
