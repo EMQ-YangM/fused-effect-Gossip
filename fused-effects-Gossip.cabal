@@ -25,6 +25,7 @@ library
                     , Gossip.SI.Push
                     , Gossip.SI.Pull
                     , Gossip.SI.PushPull
+                    , Gossip.SIR.BlindCoin
 
     -- Modules included in this library but not exported.
     -- other-modules:

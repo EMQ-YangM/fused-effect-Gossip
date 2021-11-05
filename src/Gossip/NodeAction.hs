@@ -117,21 +117,21 @@ instance (Has (Lift s) sig m,
         Nothing -> undefined
         Just tq -> do
           sendM @s $ do
-            -- time <- getCurrentTime
-            -- say $ show time
-            --   ++ " send message: "
-            --   ++ show message
-            --   ++ ". " ++ show (ns ^. nodeId)
-            --   ++ "* -> " ++ show nid
+            time <- getCurrentTime
+            say $ show time
+              ++ " send message: "
+              ++ show message
+              ++ ". " ++ show (ns ^. nodeId)
+              ++ "* -> " ++ show nid
             atomically $ writeTQueue tq (ns ^. nodeId, message)
           pure (ns, ctx)
     L ReadMessage  -> do
       res <- sendM @s $  do
         res@(nid, message) <- atomically $ readTQueue (ns ^. inputQueue)
-        -- say $ "read message: "
-        --   ++ show message
-        --   ++ ". " ++ show nid
-        --   ++ " -> " ++ show (ns ^. nodeId) ++ "*"
+        say $ "read message: "
+          ++ show message
+          ++ ". " ++ show nid
+          ++ " -> " ++ show (ns ^. nodeId) ++ "*"
         return res
       pure (ns, res <$ ctx)
     L GetNodeId -> pure (ns, ns ^. nodeId <$ ctx)

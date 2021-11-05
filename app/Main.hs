@@ -1,6 +1,6 @@
 module Main where
 
-import Gossip.SI.PushPull
+import Gossip.SIR.BlindCoin
 
 main :: IO ()
 main = do
