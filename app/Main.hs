@@ -5,4 +5,7 @@ import Gossip.SI.PushPull
 main :: IO ()
 main = do
   putStrLn "Hello, Haskell!"
-  runSim
+  -- runSim
+  runIO1
+  return ()
+

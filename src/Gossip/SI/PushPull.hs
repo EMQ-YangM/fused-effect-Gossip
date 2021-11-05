@@ -75,6 +75,31 @@ receive = do
     _               -> error "never happened"
   receive
 
+runIO1 = runIO 2000 4 (mkStdGen 10)
+
+runIO :: Int -> DiffTime -> StdGen -> IO ()
+runIO total time gen = do
+  let list = [0 .. total -1]
+  ls <- forM list $ \i -> do
+    tq <- newTQueueIO
+    sirS <- newTVarIO S
+    ss <- newTVarIO (Value (show i) i)
+    return ((NodeId i, tq), (sirS, ss))
+
+  forM_  list $ \i -> do
+    let ((a,b),(c,d)) = ls !! i
+        otherTQ = Map.fromList $ map (fst . (ls !!)) (L.delete i list)
+        ns = NodeState a b otherTQ c d
+    forkIO $ void $
+      runNodeAction @IO @Value @(PushPull, ValueOrTime) ns
+         $ runRandom gen loop
+    forkIO $ void $
+      runNodeAction @IO @Value @(PushPull, ValueOrTime) ns receive
+  threadDelay time
+  l <- forM ls $ \((nid, _),(_, tv)) -> (nid,) <$> readTVarIO tv
+  let dis = foldl (\ m (k,v) -> Map.insertWith (+) v 1 m) Map.empty l
+  print dis
+
 
 runS :: forall s. Int -> DiffTime -> StdGen -> ST s (SimTrace [(NodeId, Value)])
 runS total time gen = runSimTraceST $ do
@@ -101,7 +126,7 @@ runS total time gen = runSimTraceST $ do
 runSim = do
   total <- getLine
   i <- randomIO
-  case traceResult False $ runST $ runS (read total) 3 (mkStdGen i) of
+  case traceResult False $ runST $ runS (read total) 5 (mkStdGen i) of
     Left e -> print e
     Right l -> do
       let dis = foldl (\ m (k,v) -> Map.insertWith (+) v 1 m) Map.empty l

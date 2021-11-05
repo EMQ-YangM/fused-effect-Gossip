@@ -63,6 +63,7 @@ executable fused-effects-Gossip
 
     hs-source-dirs:   app
     default-language: Haskell2010
+    ghc-options: -threaded
 
 test-suite fused-effects-Gossip-test
     default-language: Haskell2010
