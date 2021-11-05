@@ -120,6 +120,56 @@
       _           -> error "never happened"
     receive
 #+end_src
+*** PushPull version
+
+#+DOWNLOADED: screenshot @ 2021-11-05 16:27:53
+[[file:Gossip/2021-11-05_16-27-53_screenshot.png]]
+
+#+begin_src haskell
+  data PushPull
+    = PushPull
+    | Reply
+    deriving (Show)
+
+  data ValueOrTime = T Int  | V Value deriving (Show)
+
+  data Value
+    = Value
+    { _value :: String
+    , _time  :: Int
+    } deriving (Show, Eq, Ord)
+
+  makeLenses ''Value
+
+
+  loop :: (HasLabelled NodeAction (NodeAction Value (PushPull, ValueOrTime)) sig m,
+              Has Random sig m)
+       => m ()
+  loop = do
+    peers <- getPeers
+    q <- (`Set.elemAt` peers) <$> uniformR (0, Set.size peers - 1)
+    value <- readStore
+    sendMessage q (PushPull, V value)
+    wait 1
+    loop
+
+
+  receive :: (HasLabelled NodeAction (NodeAction Value (PushPull, ValueOrTime)) sig m)
+          => m ()
+  receive = do
+    (sid, (method, v)) <- readMessage
+    value <- readStore
+    case (method, v) of
+      (PushPull, V v) -> do
+        if value ^. time < v ^. time
+          then updateStore v
+          else when (value ^. time > v ^. time) $ sendMessage sid (Reply, V value)
+      (Reply,V v)     -> when (value ^. time < v ^. time) $ updateStore v
+      _               -> error "never happened"
+    receive
+
+#+end_src
+
 * CRDT
 ** resources
   1. https://lars.hupel.info/topics/crdt/01-intro/

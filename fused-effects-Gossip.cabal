@@ -24,6 +24,7 @@ library
                     , Gossip.Shuffle
                     , Gossip.SI.Push
                     , Gossip.SI.Pull
+                    , Gossip.SI.PushPull
 
     -- Modules included in this library but not exported.
     -- other-modules:
