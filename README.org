@@ -79,7 +79,47 @@
     forM ls $ \((nid, _),(_, tv)) -> (nid,) <$> readTVarIO tv
 
 #+end_src
+*** Pull version
 
+#+DOWNLOADED: screenshot @ 2021-11-05 16:05:04
+[[file:Gossip/2021-11-05_16-05-04_screenshot.png]]
+#+begin_src haskell
+  data Pull = Pull
+            | Reply
+            deriving (Show)
+
+  data ValueOrTime = T Int  | V Value deriving (Show)
+
+  data Value
+    = Value
+    { _value :: String
+    , _time  :: Int
+    } deriving (Show, Eq, Ord)
+
+  makeLenses ''Value
+
+  loop :: (HasLabelled NodeAction (NodeAction Value (Pull, ValueOrTime)) sig m,
+              Has Random sig m)
+       => m ()
+  loop = do
+    peers <- getPeers
+    q <- (`Set.elemAt` peers) <$> uniformR (0, Set.size peers - 1)
+    value <- readStore
+    sendMessage q (Pull, T (value ^. time))
+    wait 1
+    loop
+
+  receive :: (HasLabelled NodeAction (NodeAction Value (Pull, ValueOrTime)) sig m)
+          => m ()
+  receive = do
+    (sid, (method, v)) <- readMessage
+    value <- readStore
+    case (method, v) of
+      (Pull, T t) -> when (value ^. time > t) $ sendMessage sid (Reply, V value)
+      (Reply,V v) -> when (value ^. time < v ^. time) $ updateStore v
+      _           -> error "never happened"
+    receive
+#+end_src
 * CRDT
 ** resources
   1. https://lars.hupel.info/topics/crdt/01-intro/
