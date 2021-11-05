@@ -3,7 +3,9 @@ module Gossip.Shuffle where
 
 
 import           Control.Monad.ST
-import           Data.Vector            (Vector, unsafeFreeze)
+import           Data.Set               (Set)
+import qualified Data.Set               as Set
+import           Data.Vector            (Vector, unsafeFreeze, (!))
 import           Data.Vector.Mutable
 import           System.Random.Stateful
 
@@ -22,3 +24,8 @@ shuffle n gen = do
 shuffleVec :: Int -> StdGen -> Vector Int
 shuffleVec n gen = fst $ runSTGen gen (shuffle n)
 
+shuffleSet :: StdGen -> Set s -> [s]
+shuffleSet gen set =
+  let n = Set.size set
+      svec = shuffleVec n gen
+  in map (\i -> Set.elemAt (svec ! i) set) [0 .. n - 1]

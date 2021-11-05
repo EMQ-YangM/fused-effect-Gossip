@@ -44,6 +44,10 @@ up-to-date
 4. Notice that in line 7 we do not test whether the node is infected. The reason is
    that we assumed that nodes do not know how many updates are expected, and do not
    exchange information about which updates they have received. 
+
+#+DOWNLOADED: screenshot @ 2021-11-05 13:56:38
+[[file:Learn_Gossip/2021-11-05_13-56-38_screenshot.png]]
+
 **** 1.2.2.2 The SIR Model
 
 
