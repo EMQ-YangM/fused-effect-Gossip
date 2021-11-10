@@ -1,11 +1,11 @@
 module Main where
 
-import Gossip.SI.PushPull
+import Gossip.SIR.BlindCoin
 
 main :: IO ()
 main = do
   putStrLn "Hello, Haskell!"
-  -- runSim
-  runIO1
+  runSim
+  -- write
   return ()
 

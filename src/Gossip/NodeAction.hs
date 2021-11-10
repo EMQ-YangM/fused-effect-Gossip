@@ -46,9 +46,9 @@ import           Gossip.Shuffle
 import           Optics
 import           System.Random                  (mkStdGen)
 
-newtype NodeId = NodeId Int deriving (Show, Eq, Ord)
+newtype NodeId = NodeId Int deriving (Show, Read, Eq, Ord)
 
-data SIR = I | R | S deriving (Eq, Ord, Show)
+data SIR = I | R | S deriving (Eq, Ord, Show, Read)
 
 data NodeState s value message
   = NodeState
@@ -128,20 +128,21 @@ instance (Has (Lift s) sig m,
         Just tq -> do
           sendM @s $ do
             time <- getCurrentTime
-            say $ show time
-              ++ " send message: "
-              ++ show message
-              ++ ". " ++ show (ns ^. nodeId)
-              ++ "* -> " ++ show nid
+            say $ show (time, ns ^. nodeId, nid, message)
+            -- say $ show time
+            --   ++ " send message: "
+            --   ++ show message
+            --   ++ ". " ++ show (ns ^. nodeId)
+            --   ++ "* -> " ++ show nid
             atomically $ writeTQueue tq (ns ^. nodeId, message)
           pure (ns, ctx)
     L ReadMessage  -> do
       res <- sendM @s $  do
         res@(nid, message) <- atomically $ readTQueue (ns ^. inputQueue)
-        say $ "read message: "
-          ++ show message
-          ++ ". " ++ show nid
-          ++ " -> " ++ show (ns ^. nodeId) ++ "*"
+        -- say $ "read message: "
+        --   ++ show message
+        --   ++ ". " ++ show nid
+        --   ++ " -> " ++ show (ns ^. nodeId) ++ "*"
         return res
       pure (ns, res <$ ctx)
     L GetNodeId -> pure (ns, ns ^. nodeId <$ ctx)

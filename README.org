@@ -3,6 +3,9 @@
   1. https://www.cnblogs.com/duanxz/p/3768351.html
   2. https://zhuanlan.zhihu.com/p/41228196
   3. https://juejin.cn/post/6930774718114955278
+  4. https://flopezluis.github.io/gossip-simulator/
+  5. https://managementfromscratch.wordpress.com/2016/04/01/introduction-to-gossip/
+  6. https://www.serf.io/docs/internals/simulator.html
 ** 计划
   1. 用fused-effects，和io-classes这两个库实现Gossip协议
   2. 用多线程模拟多个node执行协议

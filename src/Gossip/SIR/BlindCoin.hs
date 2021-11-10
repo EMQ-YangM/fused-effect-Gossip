@@ -1,4 +1,5 @@
 {-# LANGUAGE FlexibleContexts    #-}
+{-# LANGUAGE RecordWildCards     #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell     #-}
 {-# LANGUAGE TupleSections       #-}
@@ -37,10 +38,9 @@ data Push
   = Push
   deriving (Show)
 
-data Value
+newtype Value
   = Value
   { _value :: String
-  , _time  :: Int
   } deriving (Show, Eq, Ord)
 
 makeLenses ''Value
@@ -48,10 +48,11 @@ makeLenses ''Value
 update :: (HasLabelled NodeAction (NodeAction Value (Push, Value)) sig m)
        => Value
        -> m ()
-update v = do
-  putSIRState I
+update v@Value{..} = do
   updateStore v
-  wait 1
+  putSIRState I
+  wait 3
+  -- update (Value{ _value = _value ++ ".." })
 
 loop :: (HasLabelled NodeAction (NodeAction Value (Push, Value)) sig m,
          Has Random sig m)
@@ -81,14 +82,14 @@ receive = do
     putSIRState I
   receive
 
-runS :: forall s. Int -> DiffTime -> StdGen -> ST s (SimTrace [(NodeId, Value)])
-runS total time gen = runSimTraceST $ do
+runS :: forall s. Double -> Int -> DiffTime -> Int -> ST s (SimTrace [(NodeId, Value)])
+runS rrrr total time gen = runSimTraceST $ do
   let list = [0 .. total -1]
   ls <- forM list $ \i -> do
     tq <- newTQueueIO
     sirS <- newTVarIO S
     con <- newTVarIO 0
-    ss <- newTVarIO (Value "0" 0)
+    ss <- newTVarIO (Value "0")
     return ((NodeId i, tq), (sirS, (ss,con)))
 
   forM_  list $ \i -> do
@@ -97,27 +98,33 @@ runS total time gen = runSimTraceST $ do
         ns = NodeState a b otherTQ c d e
     forkIO $ void $
       runNodeAction @(IOSim s) @Value @(Push, Value) ns
-         $ runRandom gen (loop 60)
+         $ runRandom (mkStdGen $ gen * 1231 * i) (loop rrrr)
     forkIO $ void $
       runNodeAction @(IOSim s) @Value @(Push, Value) ns receive
 
-    when (i `mod` 75 == 0)
+    when (i == 1)
       $ void
       $ forkIO
         $ void
-        $ runNodeAction @(IOSim s) @Value @(Push, Value) ns (update (Value (show i) i))
+        $ runNodeAction @(IOSim s) @Value @(Push, Value) ns (update (Value (show i)))
 
   threadDelay time
   forM ls $ \((nid, _),(_, (tv,_))) -> (nid,) <$> readTVarIO tv
 
 
 runSim = do
-  total <- getLine
-  i <- randomIO
-  case traceResult False $ runST $ runS (read total) 30 (mkStdGen i) of
-    Left e -> print e
-    Right l -> do
-      let dis = foldl (\ m (k,v) -> Map.insertWith (+) v 1 m) Map.empty l
-      print dis
+  input <- getLine
+  let a:b:c:_ = words input
+      total = read a
+      rrrr = read b -- feq
+      cycle = read c :: Int
+  print (a,b,c)
+  forM_ [1..20] $ \_ -> do
+    i <- randomIO
+    case traceResult False $ runST $ runS rrrr total (fromIntegral cycle) i of
+      Left e -> print e
+      Right l -> do
+        let dis = foldl (\ m (k,v) -> Map.insertWith (+) v 1 m) Map.empty l
+        print dis
   runSim
 
