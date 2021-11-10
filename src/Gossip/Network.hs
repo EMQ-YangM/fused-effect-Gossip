@@ -15,23 +15,35 @@
 {-# LANGUAGE UndecidableInstances       #-}
 module Gossip.Network where
 
-import           Codec.CBOR.Decoding      (Decoder)
-import qualified Codec.CBOR.Decoding      as CBOR hiding (Done, Fail)
-import qualified Codec.CBOR.Encoding      as CBOR
-import qualified Codec.CBOR.Read          as CBOR
+import           Codec.CBOR.Decoding           (Decoder)
+import qualified Codec.CBOR.Decoding           as CBOR hiding (Done, Fail)
+import qualified Codec.CBOR.Encoding           as CBOR
+import qualified Codec.CBOR.Read               as CBOR
 import           Codec.Serialise
-import           Control.Effect.IOClasses (Algebra, DiffTime, IOSim,
-                                           MonadDelay (threadDelay),
-                                           MonadFork (forkIO),
-                                           MonadST (withLiftST),
-                                           MonadSTM (STM, atomically, newTQueueIO, readTVarIO),
-                                           MonadSTMTx (TQueue_, TVar_, readTQueue, readTVar, writeTQueue, writeTVar),
-                                           MonadSay (say),
-                                           MonadTime (getCurrentTime), SimTrace,
-                                           runSimTraceST, selectTraceEventsSay)
+import           Control.Effect.IOClasses      (Algebra, DiffTime, IOSim,
+                                                MonadDelay (threadDelay),
+                                                MonadFork (forkIO),
+                                                MonadST (withLiftST),
+                                                MonadSTM (STM, atomically, newTQueueIO, readTVarIO),
+                                                MonadSTMTx (TQueue_, TVar_, readTQueue, readTVar, writeTQueue, writeTVar),
+                                                MonadSay (say),
+                                                MonadTime (getCurrentTime),
+                                                SimTrace, runSimTraceST,
+                                                selectTraceEventsSay)
+import           Control.Exception.Base        (finally)
+import           Control.Monad
 import           Control.Monad.ST
-import qualified Data.ByteString          as BS
-import qualified Data.ByteString.Lazy     as LBS
+import           Control.Tracer                (Contravariant (contramap),
+                                                Tracer (..), nullTracer,
+                                                stdoutTracer, traceWith)
+import qualified Data.ByteString               as BS
+import qualified Data.ByteString.Lazy          as LBS
+import qualified Data.ByteString.Lazy.Internal as LBS (smallChunkSize)
+import           Gossip.NodeAction             (sendMessage)
+import           Network.Socket                (Family (AF_UNIX), SockAddr (..))
+import qualified Network.Socket                as Socket
+import qualified Network.Socket.ByteString     as Socket
+import           System.Directory
 
 data Message = M0 Int
              | M1 Double
@@ -92,11 +104,34 @@ decodeLs liftST Channel{recv} trailing decoder =
                                    = return (Right (a, Just $ LBS.fromStrict trailing'))
     go _ (CBOR.Fail _ _ failure) = return $ Left failure
 
+
+clientWork :: forall m a.
+              MonadST m
+           => Tracer m String
+           -> Message
+           -> Channel m
+           -> m (Message, Maybe LBS.ByteString)
+clientWork tracer msg channel@Channel {send} = go Nothing
+  where
+    go :: Maybe LBS.ByteString
+       -> m (Message, Maybe LBS.ByteString)
+    go trailing = do
+      send $ serialise msg
+      traceWith tracer ("sendMessage: " ++ show msg)
+      res <- withLiftST $ \liftST -> decodeLs liftST channel trailing (decode @Message)
+      case res of
+        Left err -> do
+          error $ "runServer: deserialise error " ++ show err
+        Right (msg, trailing') -> do
+          send $ serialise msg
+          pure (msg, trailing')
+
 echoServer :: forall m a.
               MonadST m
-           => Channel m
+           => Tracer m String
+           -> Channel m
            -> m (a, Maybe LBS.ByteString)
-echoServer channel@Channel {send} = go Nothing
+echoServer tracer channel@Channel {send} = go Nothing
   where
     go :: Maybe LBS.ByteString
        -> m (a, Maybe LBS.ByteString)
@@ -106,5 +141,64 @@ echoServer channel@Channel {send} = go Nothing
         Left err -> do
           error $ "runServer: deserialise error " ++ show err
         Right (msg, trailing') -> do
+          traceWith tracer ("receive: " ++ show msg)
+
           send $ serialise msg
           go trailing'
+
+pipeName = "./demo.sock"
+
+serverWorker sock = do
+  let sc = socketAsChannel sock
+  echoServer stdoutTracer  sc
+  return ()
+
+socketAsChannel :: Socket.Socket -> Channel IO
+socketAsChannel socket =
+    Channel{send, recv}
+  where
+    send :: LBS.ByteString -> IO ()
+    send chunks =
+     -- Use vectored writes.
+     Socket.sendMany socket (LBS.toChunks chunks)
+     -- TODO: limit write sizes, or break them into multiple sends.
+
+    recv :: IO (Maybe LBS.ByteString)
+    recv = do
+      -- We rely on the behaviour of stream sockets that a zero length chunk
+      -- indicates EOF.
+      chunk <- Socket.recv socket LBS.smallChunkSize
+      if BS.null chunk
+        then return Nothing
+        else return (Just (LBS.fromStrict chunk))
+
+client :: IO ()
+client = do
+    sock <- Socket.socket AF_UNIX Socket.Stream Socket.defaultProtocol
+    Socket.connect sock (SockAddrUnix pipeName)
+    -- let bearer = socketAsMuxBearer 1.0 nullTracer sock
+    -- clientWorker bearer n msg
+    let sc = socketAsChannel sock
+    r <-  clientWork stdoutTracer (M0 1000) sc
+    print r
+
+
+server :: IO ()
+server = do
+    sock <- Socket.socket AF_UNIX Socket.Stream Socket.defaultProtocol
+    removeFile pipeName
+    Socket.bind sock (SockAddrUnix pipeName)
+    Socket.listen sock 1
+    forever $ do
+      (sock', _addr) <- Socket.accept sock
+      void $ forkIO $
+        serverWorker sock'
+          `finally` Socket.close sock'
+
+
+
+
+
+
+
+
