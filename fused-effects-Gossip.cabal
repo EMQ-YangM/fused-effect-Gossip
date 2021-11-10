@@ -47,6 +47,8 @@ library
                     , stm
                     , io-sim
                     , io-classes
+                    , cborg
+                    , serialise
                     , process
 
     hs-source-dirs:   src
