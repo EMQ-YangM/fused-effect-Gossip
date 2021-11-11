@@ -45,16 +45,14 @@ newtype Value
 
 makeLenses ''Value
 
-update :: (HasLabelled NodeAction (NodeAction Value (Push, Value)) sig m)
+update :: (HasLabelled NodeAction (NodeAction s Value (Push, Value)) sig m)
        => Value
        -> m ()
 update v@Value{..} = do
   updateStore v
   putSIRState I
-  wait 3
-  -- update (Value{ _value = _value ++ ".." })
 
-loop :: (HasLabelled NodeAction (NodeAction Value (Push, Value)) sig m,
+loop :: (HasLabelled NodeAction (NodeAction s Value (Push, Value)) sig m,
          Has Random sig m)
      => Double
      -> m ()
@@ -72,7 +70,7 @@ loop k = do
   wait 1
   loop k
 
-receive :: (HasLabelled NodeAction (NodeAction Value (Push, Value)) sig m)
+receive :: (HasLabelled NodeAction (NodeAction s Value (Push, Value)) sig m)
         => m ()
 receive = do
   (sid, (Push, v)) <- readMessage

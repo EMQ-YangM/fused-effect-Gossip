@@ -41,7 +41,7 @@ data Value
 
 makeLenses ''Value
 
-loop :: (HasLabelled NodeAction (NodeAction Value (Push, Value)) sig m,
+loop :: (HasLabelled NodeAction (NodeAction s Value (Push, Value)) sig m,
             Has Random sig m)
      => m ()
 loop = do
@@ -52,7 +52,7 @@ loop = do
   wait 1
   loop
 
-receive :: (HasLabelled NodeAction (NodeAction Value (Push, Value)) sig m)
+receive :: (HasLabelled NodeAction (NodeAction s Value (Push, Value)) sig m)
         => m ()
 receive = do
   (sid, (Push, v)) <- readMessage

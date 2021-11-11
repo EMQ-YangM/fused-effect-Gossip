@@ -49,7 +49,7 @@ data Value
 
 makeLenses ''Value
 
-update :: (HasLabelled NodeAction (NodeAction Value (PushReply, Value)) sig m)
+update :: (HasLabelled NodeAction (NodeAction s Value (PushReply, Value)) sig m)
        => Int
        -> Value
        -> m ()
@@ -59,7 +59,7 @@ update k v = do
   putCounter k
   wait 1
 
-loop :: (HasLabelled NodeAction (NodeAction Value (PushReply, Value)) sig m,
+loop :: (HasLabelled NodeAction (NodeAction s Value (PushReply, Value)) sig m,
          Has Random sig m)
      => m ()
 loop = do
@@ -72,7 +72,7 @@ loop = do
   wait 1
   loop
 
-receive :: (HasLabelled NodeAction (NodeAction Value (PushReply, Value)) sig m)
+receive :: (HasLabelled NodeAction (NodeAction s Value (PushReply, Value)) sig m)
         => Int
         -> m ()
 receive k = do
