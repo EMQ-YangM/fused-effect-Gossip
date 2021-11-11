@@ -30,8 +30,10 @@ import           Control.Effect.IOClasses     (Algebra, DiffTime, IOSim,
                                                MonadSTMTx (TQueue_, TVar_, readTQueue, readTVar, writeTQueue, writeTVar),
                                                MonadSay (say),
                                                MonadTime (getCurrentTime),
-                                               SimTrace, runSimTraceST,
+                                               MonadTimer, SimTrace,
+                                               runSimTraceST,
                                                selectTraceEventsSay)
+import qualified Control.Effect.IOClasses     as IOC
 import           Control.Effect.Labelled      hiding (send)
 import           Control.Effect.Sum           as S
 import           Control.Monad
@@ -70,6 +72,9 @@ data NodeAction s value message (m :: Type -> Type) a where
   ReadMessage :: NodeAction s value message m (NodeId, message)
   InsertNode  :: NodeId -> TQueue_ (STM s) (NodeId, message) -> NodeAction s value message m ()
   DeleteNode  :: NodeId -> NodeAction s value message m ()
+
+  Timeout     :: DiffTime -> m a -> NodeAction s value massage m (Maybe a)
+
   GetNodeId   :: NodeAction s value message m NodeId
   GetPeers    :: NodeAction s value message m (Set NodeId)
   Wait        :: DiffTime -> NodeAction s value message m ()
@@ -96,6 +101,12 @@ deleteNode :: HasLabelled NodeAction (NodeAction s value message) sig m
            => NodeId
            -> m ()
 deleteNode nid = sendLabelled @NodeAction (DeleteNode nid)
+
+timeout :: HasLabelled NodeAction (NodeAction s value message) sig m
+        => DiffTime
+        -> m a
+        -> m (Maybe a)
+timeout dt action = sendLabelled @NodeAction (Timeout dt action)
 
 getNodeId :: HasLabelled NodeAction (NodeAction s value message) sig m => m NodeId
 getNodeId = sendLabelled @NodeAction GetNodeId
@@ -129,10 +140,12 @@ newtype NodeActionC s value message m a =
   deriving (Functor, Applicative ,Monad)
 
 instance (Has (Lift s) sig m,
+          s ~ m,
           MonadDelay s,
           MonadSay s,
           Show message,
           MonadTime s,
+          MonadTimer s,
           MonadSTM s)
       => Algebra (NodeAction s value message :+: sig)
                  (NodeActionC s value message m) where
@@ -164,6 +177,12 @@ instance (Has (Lift s) sig m,
       pure (ns & peers %~ Map.insert nid tq , ctx)
     L (DeleteNode nid) -> do
       pure (ns & peers %~ Map.delete nid , ctx)
+    L (Timeout dt action) -> do
+      v <- sendM @s $ do
+        IOC.timeout dt (runState ns $ runNodeActionC $ hdl (action <$ ctx))
+      case v of
+        Nothing     -> pure (ns, Nothing <$ ctx) -- when timeout, some state will rollback
+        Just (_, a) -> pure (ns, fmap Just a)
     L GetNodeId -> pure (ns, ns ^. nodeId <$ ctx)
     L GetPeers -> pure (ns, Map.keysSet (ns ^. peers) <$ ctx)
     L (Wait df) -> sendM @s (threadDelay df) >> pure (ns, ctx)
