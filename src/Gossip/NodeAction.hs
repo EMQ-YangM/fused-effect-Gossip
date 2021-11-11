@@ -72,9 +72,7 @@ data NodeAction s value message (m :: Type -> Type) a where
   ReadMessage :: NodeAction s value message m (NodeId, message)
   InsertNode  :: NodeId -> TQueue_ (STM s) (NodeId, message) -> NodeAction s value message m ()
   DeleteNode  :: NodeId -> NodeAction s value message m ()
-
   Timeout     :: DiffTime -> m a -> NodeAction s value massage m (Maybe a)
-
   GetNodeId   :: NodeAction s value message m NodeId
   GetPeers    :: NodeAction s value message m (Set NodeId)
   Wait        :: DiffTime -> NodeAction s value message m ()
@@ -140,8 +138,8 @@ newtype NodeActionC s value message m a =
   deriving (Functor, Applicative ,Monad)
 
 instance (Has (Lift s) sig m,
-          s ~ m,
           MonadDelay s,
+          s ~ m,
           MonadSay s,
           Show message,
           MonadTime s,
@@ -154,24 +152,10 @@ instance (Has (Lift s) sig m,
       case ns ^. peers % at nid of
         Nothing -> undefined
         Just tq -> do
-          sendM @s $ do
-            -- time <- getCurrentTime
-            -- say $ show (time, ns ^. nodeId, nid, message)
-            -- say $ show time
-            --   ++ " send message: "
-            --   ++ show message
-            --   ++ ". " ++ show (ns ^. nodeId)
-            --   ++ "* -> " ++ show nid
-            atomically $ writeTQueue tq (ns ^. nodeId, message)
+          sendM @s $ atomically $ writeTQueue tq (ns ^. nodeId, message)
           pure (ns, ctx)
     L ReadMessage  -> do
-      res <- sendM @s $  do
-        res@(nid, message) <- atomically $ readTQueue (ns ^. inputQueue)
-        -- say $ "read message: "
-        --   ++ show message
-        --   ++ ". " ++ show nid
-        --   ++ " -> " ++ show (ns ^. nodeId) ++ "*"
-        return res
+      res <- sendM @s $ atomically $ readTQueue (ns ^. inputQueue)
       pure (ns, res <$ ctx)
     L (InsertNode nid tq) -> do
       pure (ns & peers %~ Map.insert nid tq , ctx)
@@ -181,8 +165,8 @@ instance (Has (Lift s) sig m,
       v <- sendM @s $ do
         IOC.timeout dt (runState ns $ runNodeActionC $ hdl (action <$ ctx))
       case v of
-        Nothing     -> pure (ns, Nothing <$ ctx) -- when timeout, some state will rollback
-        Just (_, a) -> pure (ns, fmap Just a)
+        Nothing      -> pure (ns, Nothing <$ ctx) -- when timeout, some state will rollback
+        Just (ns, a) -> pure (ns, fmap Just a)
     L GetNodeId -> pure (ns, ns ^. nodeId <$ ctx)
     L GetPeers -> pure (ns, Map.keysSet (ns ^. peers) <$ ctx)
     L (Wait df) -> sendM @s (threadDelay df) >> pure (ns, ctx)
