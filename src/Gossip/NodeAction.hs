@@ -69,7 +69,7 @@ data NodeAction s value message (m :: Type -> Type) a where
   SendMessage :: NodeId -> message -> NodeAction s value message m ()
   ReadMessage :: NodeAction s value message m (NodeId, message)
   InsertNode  :: NodeId -> TQueue_ (STM s) (NodeId, message) -> NodeAction s value message m ()
-  DeleteNode :: NodeId -> NodeAction s value message m ()
+  DeleteNode  :: NodeId -> NodeAction s value message m ()
   GetNodeId   :: NodeAction s value message m NodeId
   GetPeers    :: NodeAction s value message m (Set NodeId)
   Wait        :: DiffTime -> NodeAction s value message m ()
@@ -142,22 +142,22 @@ instance (Has (Lift s) sig m,
         Nothing -> undefined
         Just tq -> do
           sendM @s $ do
-            time <- getCurrentTime
-            say $ show (time, ns ^. nodeId, nid, message)
-            say $ show time
-              ++ " send message: "
-              ++ show message
-              ++ ". " ++ show (ns ^. nodeId)
-              ++ "* -> " ++ show nid--
+            -- time <- getCurrentTime
+            -- say $ show (time, ns ^. nodeId, nid, message)
+            -- say $ show time
+            --   ++ " send message: "
+            --   ++ show message
+            --   ++ ". " ++ show (ns ^. nodeId)
+            --   ++ "* -> " ++ show nid
             atomically $ writeTQueue tq (ns ^. nodeId, message)
           pure (ns, ctx)
     L ReadMessage  -> do
       res <- sendM @s $  do
         res@(nid, message) <- atomically $ readTQueue (ns ^. inputQueue)
-        say $ "read message: "
-          ++ show message
-          ++ ". " ++ show nid
-          ++ " -> " ++ show (ns ^. nodeId) ++ "*"--
+        -- say $ "read message: "
+        --   ++ show message
+        --   ++ ". " ++ show nid
+        --   ++ " -> " ++ show (ns ^. nodeId) ++ "*"
         return res
       pure (ns, res <$ ctx)
     L (InsertNode nid tq) -> do
