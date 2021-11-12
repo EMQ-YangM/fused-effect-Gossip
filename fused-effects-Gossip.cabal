@@ -41,6 +41,7 @@ library
                     , fused-effects-optics
                     , fused-effects-io-sim
                     , fused-effects-random
+                    , fused-effects-th
                     , vector
                     , random
                     , optics

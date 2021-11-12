@@ -1,4 +1,5 @@
 {-# LANGUAGE AllowAmbiguousTypes        #-}
+{-# LANGUAGE DataKinds                  #-}
 {-# LANGUAGE DeriveFunctor              #-}
 {-# LANGUAGE FlexibleContexts           #-}
 {-# LANGUAGE FlexibleInstances          #-}
@@ -16,6 +17,7 @@
 {-# LANGUAGE UndecidableInstances       #-}
 
 module Gossip.Swim.Impl where
+import           Control.Algebra              (send)
 import           Control.Algebra              hiding (send)
 import           Control.Arrow                (Arrow (second))
 import           Control.Carrier.Lift
@@ -34,10 +36,8 @@ import           Control.Effect.IOClasses     (Algebra, DiffTime, IOSim,
                                                runSimTraceST,
                                                selectTraceEventsSay)
 import qualified Control.Effect.IOClasses     as IOC
-import           Control.Effect.Labelled      hiding (send)
-import           Control.Effect.Sum           as S
 import           Control.Monad
-import           Data.ByteString              hiding (take)
+import           Data.ByteString              hiding (getLine, take)
 import           Data.Kind
 import qualified Data.List                    as L
 import           Data.Map                     (Map)
@@ -49,3 +49,23 @@ import qualified Data.Vector                  as V
 import           Gossip.Shuffle
 import           Gossip.Swim.Type
 import           Optics
+import           Unsafe.Coerce
+
+newtype NodeActionC s a = NodeActionC {runNodeActionC :: StateC (NodeState s) s a}
+  deriving (Functor, Applicative, Monad)
+
+instance Monad s => Algebra NodeAction (NodeActionC s) where
+  alg hdl sig ctx = undefined
+
+runNodeAction :: NodeState s -> NodeActionC s a -> s (NodeState s, a)
+runNodeAction tq f = runState tq $ runNodeActionC f
+
+foo1 :: (Has (NodeAction :+: State Int) sig m)
+     => m ()
+foo1 = do
+  sendMessage (NodeId 10) Ping
+  put @Int 10
+
+runFoo1 = runNodeAction @IO undefined
+        $ runState @Int 0 foo1
+

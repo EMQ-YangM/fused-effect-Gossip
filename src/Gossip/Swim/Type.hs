@@ -1,15 +1,17 @@
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE GADTs            #-}
-{-# LANGUAGE KindSignatures   #-}
-{-# LANGUAGE TemplateHaskell  #-}
-{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE FlexibleContexts    #-}
+{-# LANGUAGE GADTs               #-}
+{-# LANGUAGE KindSignatures      #-}
+{-# LANGUAGE RankNTypes          #-}
+{-# LANGUAGE TemplateHaskell     #-}
+{-# LANGUAGE TypeApplications    #-}
 
 module Gossip.Swim.Type where
 import           Control.Algebra
 import           Control.Carrier.State.Strict
 import           Control.Effect.IOClasses     (DiffTime, MonadSTM (STM),
                                                MonadSTMTx (TQueue_))
-import           Control.Effect.Labelled
+import           Control.Effect.TH
 import           Data.Kind
 import           Data.Map                     (Map)
 import           Data.Set                     (Set)
@@ -34,81 +36,23 @@ data NodeState s
 
 makeLenses ''NodeState
 
-data NodeAction s (m :: Type -> Type) a where
+-- failureDetector
 
-  SendMessage :: NodeId   -> Message -> NodeAction s m ()
-
-  ReadMessage :: NodeId   -> NodeAction s m Message
-
-  InsertNode  :: NodeId   -> DTQueue s -> NodeAction s m ()
-
-  DeleteNode  :: NodeId   -> NodeAction s m ()
-
-  PeekWithTimeout :: DiffTime -> NodeId -> NodeAction s m (Maybe a)
-
-  GetNodeId   :: NodeAction s m NodeId
-
-  GetPeers    :: NodeAction s m (Set NodeId)
-
-  Wait        :: DiffTime -> NodeAction s m ()
-
+data NodeAction (m :: Type -> Type) a where
+  SendMessage :: NodeId -> Message -> NodeAction m ()
+  ReadMessage :: NodeId -> NodeAction m Message
+  -- InsertNode  :: NodeId -> DTQ -> NodeAction m () ??? don't need insert node ???
+  DeleteNode  :: NodeId -> NodeAction m ()
+  PeekWithTimeout :: DiffTime -> NodeId -> NodeAction m (Maybe Message)
+  GetNodeId   :: NodeAction m NodeId
+  GetPeers    :: NodeAction m (Set NodeId)
+  Wait        :: DiffTime -> NodeAction m ()
   PeekSomeMessageFromAllPeersWithTimeout
     :: DiffTime
     -> [NodeId]
-    -> message
-    -> NodeAction s m (Maybe Bool)
+    -> Message
+    -> NodeAction m (Maybe Bool)
+  WaitAnyMessageFromAllPeers :: NodeAction m (NodeId, Message)
+  ForkPingReqHandler :: NodeId -> DiffTime -> NodeId -> NodeAction m ()
 
-  WaitAnyMessageFromAllPeers :: NodeAction s m (NodeId, Message)
-
-  ForkPingReqHandler :: NodeId -> DiffTime -> NodeId -> NodeAction s m ()
-
-sendMessage :: HasLabelled NodeAction (NodeAction s) sig m => NodeId -> Message -> m ()
-sendMessage nid message = sendLabelled @NodeAction (SendMessage nid message)
-
-readMessage :: HasLabelled NodeAction (NodeAction s) sig m => NodeId -> m Message
-readMessage nid = sendLabelled @NodeAction (ReadMessage nid)
-
-insertNode :: HasLabelled NodeAction (NodeAction s) sig m
-           => NodeId
-           -> DTQueue s
-           -> m ()
-insertNode nid tq = sendLabelled @NodeAction (InsertNode nid tq)
-
-deleteNode :: HasLabelled NodeAction (NodeAction s) sig m
-           => NodeId
-           -> m ()
-deleteNode nid = sendLabelled @NodeAction (DeleteNode nid)
-
-peekWithTimeout :: HasLabelled NodeAction (NodeAction s) sig m
-        => DiffTime
-        -> NodeId
-        -> m (Maybe a)
-peekWithTimeout dt nid = sendLabelled @NodeAction (PeekWithTimeout dt nid)
-
-getNodeId :: HasLabelled NodeAction (NodeAction s) sig m => m NodeId
-getNodeId = sendLabelled @NodeAction GetNodeId
-
-getPeers :: HasLabelled NodeAction (NodeAction s) sig m => m (Set NodeId)
-getPeers = sendLabelled @NodeAction GetPeers
-
-wait :: HasLabelled NodeAction (NodeAction s) sig m => DiffTime -> m ()
-wait df = sendLabelled @NodeAction (Wait df)
-
-peekSomeMessageFormAllPeersWithTimeout :: HasLabelled NodeAction (NodeAction s) sig m
-                                       => DiffTime
-                                       -> [NodeId]
-                                       -> Message
-                                       -> m (Maybe Bool)
-peekSomeMessageFormAllPeersWithTimeout dt nids message =
-  sendLabelled @NodeAction (PeekSomeMessageFromAllPeersWithTimeout dt nids message)
-
-waitAnyMessageFromAllPeers :: HasLabelled NodeAction (NodeAction s) sig m
-                           => m (NodeId, Message)
-waitAnyMessageFromAllPeers = sendLabelled @NodeAction WaitAnyMessageFromAllPeers
-
-forkPingReqHandler :: HasLabelled NodeAction (NodeAction s) sig m
-                   => NodeId     -- ping node id
-                   -> DiffTime   -- timeout time
-                   -> NodeId     -- source node id
-                   -> m ()
-forkPingReqHandler nid' dt nid = sendLabelled @NodeAction (ForkPingReqHandler nid' dt nid)
+makeSmartConstructors ''NodeAction

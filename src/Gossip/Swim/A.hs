@@ -31,8 +31,7 @@ import           Gossip.Swim.Type
 import           System.Random                (mkStdGen)
 
 
-broadcast :: (HasLabelled NodeAction (NodeAction s) sig m,
-              Has Random sig m)
+broadcast :: (Has (Random :+: NodeAction) sig m)
           => Int
           -> Message
           -> m [NodeId]
@@ -44,8 +43,7 @@ broadcast n message = do
     sendMessage id message
     pure id
 
-loop :: (HasLabelled NodeAction (NodeAction s) sig m,
-         Has (Random :+: State Int) sig m)
+loop :: (Has (Random :+: NodeAction) sig m)
      => m ()
 loop = do
   peers <- getPeers
@@ -66,7 +64,7 @@ loop = do
       _   -> error "never happened"
     Nothing  -> do
       nids <- broadcast 5 (PingReq nid)
-      res <- peekSomeMessageFormAllPeersWithTimeout 2 nids (Alive nid)
+      res <- peekSomeMessageFromAllPeersWithTimeout 2 nids (Alive nid)
       case res of
         Just True -> pure ()
         _         -> do
@@ -76,8 +74,7 @@ loop = do
   wait 1
   loop
 
-receive :: (HasLabelled NodeAction (NodeAction s) sig m,
-            Has Random sig m)
+receive :: (Has (Random :+: NodeAction) sig m)
         => m ()
 receive = do
   (nid, message) <- waitAnyMessageFromAllPeers
@@ -85,10 +82,6 @@ receive = do
     Ping         -> sendMessage nid Ack
     Ack          -> pure ()
     PingReq nid' -> forkPingReqHandler nid' 1 nid
-      -- sendMessage nid' Ping
-      -- peekWithTimeout 1 nid' >>= \case
-      --   Just Ack -> sendMessage nid (Alive nid')
-      --   _        -> pure ()
     Alive nid'   -> pure ()
     Dead nid'    -> do
       deleteNode nid'
