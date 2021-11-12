@@ -5,6 +5,7 @@
 {-# LANGUAGE GADTs                      #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE KindSignatures             #-}
+{-# LANGUAGE LambdaCase                 #-}
 {-# LANGUAGE MultiParamTypeClasses      #-}
 {-# LANGUAGE NamedFieldPuns             #-}
 {-# LANGUAGE RankNTypes                 #-}
@@ -14,127 +15,84 @@
 {-# LANGUAGE TypeOperators              #-}
 {-# LANGUAGE UndecidableInstances       #-}
 
-
 module Gossip.Swim.A where
 import           Control.Algebra              hiding (send)
-import           Control.Arrow                (Arrow (second))
 import           Control.Carrier.Lift
 import           Control.Carrier.Random.Gen
-import           Control.Carrier.Reader
 import           Control.Carrier.State.Strict
-import           Control.Effect.IOClasses     (Algebra, DiffTime, IOSim,
-                                               MonadDelay (threadDelay),
-                                               MonadFork (forkIO),
-                                               MonadST (withLiftST),
-                                               MonadSTM (STM, atomically, newTQueueIO, readTVarIO),
-                                               MonadSTMTx (TQueue_, TVar_, readTQueue, readTVar, writeTQueue, writeTVar),
-                                               MonadSay (say),
-                                               MonadTime (getCurrentTime),
-                                               MonadTimer, SimTrace,
-                                               runSimTraceST,
-                                               selectTraceEventsSay)
-import qualified Control.Effect.IOClasses     as IOC
 import           Control.Effect.Labelled      hiding (send)
-import           Control.Effect.Sum           as S
 import           Control.Monad
-import           Data.ByteString
 import           Data.Kind
 import qualified Data.List                    as L
-import           Data.Map                     (Map)
 import qualified Data.Map                     as Map
-import           Data.Set                     (Set)
 import qualified Data.Set                     as Set
-import           Data.Vector                  ((!))
-import qualified Data.Vector                  as V
 import           Gossip.Shuffle
-import           Optics
+import           Gossip.Swim.Type
 import           System.Random                (mkStdGen)
 
 
-data Message
-  = Ping
-  | Ack
-  | PingReq NodeId
-  | Alive NodeId
-  | Dead NodeId
+broadcast :: (HasLabelled NodeAction (NodeAction s) sig m,
+              Has Random sig m)
+          => Int
+          -> Message
+          -> m [NodeId]
+broadcast n message = do
+  peers <- getPeers
+  gen <- mkStdGen <$> uniform
+  let shuffle = shuffleSet gen peers
+  forM (take n shuffle) $ \id -> do
+    sendMessage id message
+    pure id
 
-newtype NodeId = NodeId Int deriving (Show, Read, Eq, Ord)
+loop :: (HasLabelled NodeAction (NodeAction s) sig m,
+         Has (Random :+: State Int) sig m)
+     => m ()
+loop = do
+  peers <- getPeers
 
-type DTQueue s message = (TQueue_ (STM s) message, TQueue_ (STM s) message)
+  let size = Set.size peers
 
-data NodeState s value message
-  = NodeState
-  { _nodeId :: NodeId
-  , _peers  :: Map NodeId (DTQueue s message)
-  }
+  i <- uniformR (0, size-1)
 
-makeLenses ''NodeState
+  let nid = Set.elemAt i peers
 
-data NodeAction s message (m :: Type -> Type) a where
-
-  SendMessage :: NodeId   -> message -> NodeAction s message m ()
-
-  ReadMessage :: NodeId   -> NodeAction s message m message
-
-  InsertNode  :: NodeId   -> DTQueue s message -> NodeAction s message m ()
-
-  DeleteNode  :: NodeId   -> NodeAction s message m ()
-
-  Timeout     :: DiffTime -> m a -> NodeAction s massage m (Maybe a)
-
-  GetNodeId   :: NodeAction s message m NodeId
-
-  GetPeers    :: NodeAction s message m (Set NodeId)
-
-  Wait        :: DiffTime -> NodeAction s message m ()
-
-sendMessage :: HasLabelled NodeAction (NodeAction s message) sig m => NodeId -> message -> m ()
-sendMessage nid message = sendLabelled @NodeAction (SendMessage nid message)
-
-readMessage :: HasLabelled NodeAction (NodeAction s message) sig m => NodeId -> m message
-readMessage nid = sendLabelled @NodeAction (ReadMessage nid)
-
-insertNode :: HasLabelled NodeAction (NodeAction s message) sig m
-           => NodeId
-           -> DTQueue s message
-           -> m ()
-insertNode nid tq = sendLabelled @NodeAction (InsertNode nid tq)
-
-deleteNode :: HasLabelled NodeAction (NodeAction s message) sig m
-           => NodeId
-           -> m ()
-deleteNode nid = sendLabelled @NodeAction (DeleteNode nid)
-
-timeout :: HasLabelled NodeAction (NodeAction s message) sig m
-        => DiffTime
-        -> m a
-        -> m (Maybe a)
-timeout dt action = sendLabelled @NodeAction (Timeout dt action)
-
-getNodeId :: HasLabelled NodeAction (NodeAction s message) sig m => m NodeId
-getNodeId = sendLabelled @NodeAction GetNodeId
-
-getPeers :: HasLabelled NodeAction (NodeAction s message) sig m => m (Set NodeId)
-getPeers = sendLabelled @NodeAction GetPeers
-
-wait :: HasLabelled NodeAction (NodeAction s message) sig m => DiffTime -> m ()
-wait df = sendLabelled @NodeAction (Wait df)
-
-------------------------------------------------------------------------
-failuerDetector :: (HasLabelled NodeAction (NodeAction s Message) sig m,
-                    Has (Random :+: State Int) sig m)
-                => NodeId
-                -> m ()
-failuerDetector nid = do
   sendMessage nid Ping
-  message <- timeout 1 (readMessage nid)
+
+  message <- peekWithTimeout 1 nid
+
   case message of
     Just v -> case v of
       Ack -> pure ()
       _   -> error "never happened"
     Nothing  -> do
-      peers <- getPeers
-      forM_ (Set.toList peers) $ \id -> do
-        sendMessage id (PingReq id)
-      -- TODO: wait for any response
-      undefined
+      nids <- broadcast 5 (PingReq nid)
+      res <- peekSomeMessageFormAllPeersWithTimeout 2 nids (Alive nid)
+      case res of
+        Just True -> pure ()
+        _         -> do
+          deleteNode nid
+          broadcast 5 (Dead nid)
+          pure ()
+  wait 1
+  loop
+
+receive :: (HasLabelled NodeAction (NodeAction s) sig m,
+            Has Random sig m)
+        => m ()
+receive = do
+  (nid, message) <- waitAnyMessageFromAllPeers
+  case message of
+    Ping         -> sendMessage nid Ack
+    Ack          -> pure ()
+    PingReq nid' -> forkPingReqHandler nid' 1 nid
+      -- sendMessage nid' Ping
+      -- peekWithTimeout 1 nid' >>= \case
+      --   Just Ack -> sendMessage nid (Alive nid')
+      --   _        -> pure ()
+    Alive nid'   -> pure ()
+    Dead nid'    -> do
+      deleteNode nid'
+      broadcast 5 (Dead nid')
+      pure ()
+
+  receive

@@ -22,6 +22,8 @@ library
     exposed-modules:  Gossip.Types
                     , Gossip.NodeAction
                     , Gossip.Shuffle
+                    , Gossip.Swim.A
+                    , Gossip.Swim.Type
                     , Gossip.SI.Push
                     , Gossip.SI.Pull
                     , Gossip.SI.PushPull
