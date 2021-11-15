@@ -27,6 +27,12 @@ data Message
 
 newtype NodeId = NodeId Int deriving (Show, Read, Eq, Ord)
 
+data Channel m
+  = Channel
+  { send :: Message -> m (),
+    recv :: m Message
+  }
+
 type DTQueue s = (TQueue_ (STM s) Message, TQueue_ (STM s) Message)
 
 data NodeState s

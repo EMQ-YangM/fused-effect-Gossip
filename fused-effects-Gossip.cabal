@@ -23,6 +23,7 @@ library
                     , Gossip.NodeAction
                     , Gossip.Shuffle
                     , Gossip.Swim.A
+                    , Gossip.Swim.Test
                     , Gossip.Swim.Type
                     , Gossip.SI.Push
                     , Gossip.SI.Pull
