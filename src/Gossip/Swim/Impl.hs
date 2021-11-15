@@ -67,9 +67,13 @@ instance (Monad s, MonadSTM s, MonadTimer s, Alternative s, MonadFork s)
       let (input, output) = fromMaybe (error "never happened") $ Map.lookup ni (ns ^. peers)
       atomically (readTQueue input) >>= \x -> pure (ns, x <$ ctx)
     DeleteNode ni -> pure (ns & peers %~ Map.delete ni, ctx)
-    PeekWithTimeout dt ni -> do
+    PeekWithTimeout dt ni message -> do
       let (input, output) = fromMaybe (error "never happened") $ Map.lookup ni (ns ^. peers)
-      val <- timeout dt $ atomically $ readTQueue input
+      val <- timeout dt $ atomically $ do
+        val <- peekTQueue input
+        if val == message
+          then pure True
+          else retry
       pure (ns, val <$ ctx)
     GetNodeId -> pure (ns, ns ^. nodeId <$ ctx)
     GetPeers -> pure (ns, Map.keysSet (ns ^. peers) <$ ctx)

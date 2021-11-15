@@ -69,14 +69,12 @@ loop = do
   sendMessage nid Ping
 
   ts <- view timeoutSize
-  message <- peekWithTimeout ts nid
+  isSucc <- peekWithTimeout ts nid Ack
 
   subSize <- view subSetSize
-  case message of
-    Just v -> case v of
-      Ack -> pure ()
-      _   -> error "never happened"
-    Nothing  -> do
+  case isSucc of
+    Just True -> pure ()
+    _  -> do
       nids <- broadcast subSize (PingReq nid)
       res <- peekSomeMessageFromAllPeersWithTimeout ts nids (Alive nid)
       case res of

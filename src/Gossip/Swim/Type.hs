@@ -50,7 +50,7 @@ data NodeAction (m :: Type -> Type) a where
   ReadMessage :: NodeId -> NodeAction m Message
   -- InsertNode  :: NodeId -> DTQ -> NodeAction m () ??? don't need insert node ???
   DeleteNode  :: NodeId -> NodeAction m ()
-  PeekWithTimeout :: DiffTime -> NodeId -> NodeAction m (Maybe Message)
+  PeekWithTimeout :: DiffTime -> NodeId -> Message -> NodeAction m (Maybe Bool)
   GetNodeId   :: NodeAction m NodeId
   GetPeers    :: NodeAction m (Set NodeId)
   Wait        :: DiffTime -> NodeAction m ()

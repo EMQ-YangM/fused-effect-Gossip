@@ -30,12 +30,12 @@ mkDTQ = do
 
 
 mkDTQEffect :: (Monad s,
-          MonadSTM s,
-          MonadTimer s,
-          MonadFork s)
-      => (Message -> s ())
-      -> (Message -> s ())
-      -> s (TQueue_ (STM s) Message, TQueue_ (STM s) Message)
+                MonadSTM s,
+                MonadTimer s,
+                MonadFork s)
+            => (Message -> s ())
+            -> (Message -> s ())
+            -> s (TQueue_ (STM s) Message, TQueue_ (STM s) Message)
 mkDTQEffect beforeSend afterRecv = do
   readTQ <- newTQueueIO
   writeTQ <- newTQueueIO
