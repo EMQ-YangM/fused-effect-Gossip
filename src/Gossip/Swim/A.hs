@@ -19,8 +19,11 @@ module Gossip.Swim.A where
 import           Control.Algebra              hiding (send)
 import           Control.Carrier.Lift
 import           Control.Carrier.Random.Gen
+import           Control.Carrier.Reader
 import           Control.Carrier.State.Strict
+import           Control.Effect.IOClasses     (DiffTime)
 import           Control.Effect.Labelled      hiding (send)
+import           Control.Effect.Optics        (view)
 import           Control.Monad
 import           Data.Kind
 import qualified Data.List                    as L
@@ -28,7 +31,16 @@ import qualified Data.Map                     as Map
 import qualified Data.Set                     as Set
 import           Gossip.Shuffle
 import           Gossip.Swim.Type
+import           Optics                       (makeLenses)
 import           System.Random                (mkStdGen)
+
+data Config
+  = Config
+  { _subSetSize  :: Int
+  , _timeoutSize :: DiffTime
+  }
+
+makeLenses ''Config
 
 
 broadcast :: (Has (Random :+: NodeAction) sig m)
@@ -43,7 +55,7 @@ broadcast n message = do
     sendMessage id message
     pure id
 
-loop :: (Has (Random :+: NodeAction) sig m)
+loop :: (Has (Random :+: NodeAction :+: Reader Config) sig m)
      => m ()
 loop = do
   peers <- getPeers
@@ -56,36 +68,41 @@ loop = do
 
   sendMessage nid Ping
 
-  message <- peekWithTimeout 1 nid
+  ts <- view timeoutSize
+  message <- peekWithTimeout ts nid
 
+  subSize <- view subSetSize
   case message of
     Just v -> case v of
       Ack -> pure ()
       _   -> error "never happened"
     Nothing  -> do
-      nids <- broadcast 5 (PingReq nid)
-      res <- peekSomeMessageFromAllPeersWithTimeout 2 nids (Alive nid)
+      nids <- broadcast subSize (PingReq nid)
+      res <- peekSomeMessageFromAllPeersWithTimeout ts nids (Alive nid)
       case res of
         Just True -> pure ()
         _         -> do
           deleteNode nid
-          broadcast 5 (Dead nid)
+          broadcast subSize (Dead nid)
           pure ()
   wait 1
   loop
 
-receive :: (Has (Random :+: NodeAction) sig m)
+receive :: (Has (Random :+: NodeAction :+: Reader Config) sig m)
         => m ()
 receive = do
+  ts <- view timeoutSize
+  subSize <- view subSetSize
+
   (nid, message) <- waitAnyMessageFromAllPeers
   case message of
     Ping         -> sendMessage nid Ack
     Ack          -> pure ()
-    PingReq nid' -> forkPingReqHandler nid' 1 nid
+    PingReq nid' -> forkPingReqHandler nid' ts nid
     Alive nid'   -> pure ()
     Dead nid'    -> do
       deleteNode nid'
-      broadcast 5 (Dead nid')
+      broadcast subSize (Dead nid')
       pure ()
 
   receive

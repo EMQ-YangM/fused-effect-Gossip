@@ -23,6 +23,7 @@ data Message
   | PingReq NodeId
   | Alive NodeId
   | Dead NodeId
+  deriving (Show, Eq)
 
 newtype NodeId = NodeId Int deriving (Show, Read, Eq, Ord)
 
